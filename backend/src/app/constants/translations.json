@@ -1,0 +1,108 @@
+{
+  "tr": {
+    "departments": {
+      "Acting": "Oyuncu",
+      "Directing": "Yönetmen",
+      "Writing": "Yazar",
+      "Production": "Yapımcı",
+      "Editing": "Kurgu",
+      "Camera": "Görüntü Yönetmeni",
+      "Sound": "Ses",
+      "Art": "Sanat Yönetmeni",
+      "Costume & Make-Up": "Kostüm & Makyaj",
+      "Visual Effects": "Görsel Efekt",
+      "Crew": "Ekip"
+    },
+    "roles": {
+      "Acting": "Oyuncu",
+      "Director": "Yönetmen",
+      "Executive Producer": "Yönetici Yapımcı",
+      "Producer": "Yapımcı",
+      "Writer": "Yazar",
+      "Screenplay": "Senaryo",
+      "Original Music Composer": "Müzik",
+      "Director of Photography": "Görüntü Yönetmeni",
+      "Editor": "Kurgu",
+      "Art Direction": "Sanat Yönetmeni",
+      "Casting": "Cast",
+      "Artist": "Sanatçı",
+      "Crew": "Ekip",
+      "voice": "ses"
+    },
+    "status": {
+      "Released": "Yayınlandı",
+      "Post Production": "Yapım Aşamasında",
+      "In Production": "Yapım Aşamasında",
+      "Returning Series": "Devam Ediyor",
+      "Ended": "Bitti",
+      "Canceled": "İptal Edildi",
+      "Pilot": "Pilot Bölüm",
+      "Planned": "Planlandı"
+    },
+    "languages": {
+      "en": "İngilizce",
+      "tr": "Türkçe",
+      "fr": "Fransızca",
+      "de": "Almanca",
+      "es": "İspanyolca",
+      "it": "İtalyanca",
+      "ja": "Japonca",
+      "ko": "Korece",
+      "ru": "Rusça",
+      "zh": "Çince"
+    }
+  },
+  "en": {
+    "departments": {
+      "Acting": "Acting",
+      "Directing": "Directing",
+      "Writing": "Writing",
+      "Production": "Production",
+      "Editing": "Editing",
+      "Camera": "Camera",
+      "Sound": "Sound",
+      "Art": "Art",
+      "Costume & Make-Up": "Costume & Make-Up",
+      "Visual Effects": "Visual Effects",
+      "Crew": "Crew"
+    },
+    "roles": {
+      "Acting": "Actor",
+      "Director": "Director",
+      "Executive Producer": "Executive Producer",
+      "Producer": "Producer",
+      "Writer": "Writer",
+      "Screenplay": "Screenplay",
+      "Original Music Composer": "Music",
+      "Director of Photography": "Director of Photography",
+      "Editor": "Editor",
+      "Art Direction": "Art Direction",
+      "Casting": "Casting",
+      "Artist": "Artist",
+      "Crew": "Crew",
+      "voice": "voice"
+    },
+    "status": {
+      "Released": "Released",
+      "Post Production": "Post Production",
+      "In Production": "In Production",
+      "Returning Series": "Returning Series",
+      "Ended": "Ended",
+      "Canceled": "Canceled",
+      "Pilot": "Pilot",
+      "Planned": "Planned"
+    },
+    "languages": {
+      "en": "English",
+      "tr": "Turkish",
+      "fr": "French",
+      "de": "German",
+      "es": "Spanish",
+      "it": "Italian",
+      "ja": "Japanese",
+      "ko": "Korean",
+      "ru": "Russian",
+      "zh": "Chinese"
+    }
+  }
+}

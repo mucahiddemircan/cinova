@@ -1,0 +1,33 @@
+from . import (
+    auth,
+    movies,
+    series,
+    users,
+    people,
+    follows,
+    comments,
+    recommendations,
+    certifications,
+    library,
+    profiles,
+    notifications,
+    account,
+    custom_lists,
+)
+
+__all__ = [
+    "auth",
+    "movies",
+    "series",
+    "users",
+    "people",
+    "follows",
+    "comments",
+    "recommendations",
+    "certifications",
+    "library",
+    "profiles",
+    "notifications",
+    "account",
+    "custom_lists",
+]

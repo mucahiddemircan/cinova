@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content="ABCDEFGH - Film ve dizi tutkunları için kişiselleştirilmiş izleme listesi platformu." />
+    <meta name="keywords" content="film, dizi, izleme listesi, watchlist, tmdb, sinema" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>ABCDEFGH</title>
+    
+    <script>
+      (function() {
+        const savedLang = localStorage.getItem('app_language') || 'tr';
+        document.documentElement.lang = savedLang;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
