@@ -1,16 +1,56 @@
-# React + Vite
+# Cinova - Modern Next.js Frontend 💻
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the Next.js frontend for **Cinova**. It implements a fully localized web interface for browsing movies, managing lists, checking recommendations, and interacting with the support chatbot.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🛠️ Tech Stack & Features
 
-## React Compiler
+- **Framework**: [Next.js](https://nextjs.org/) (App Router, Server Actions)
+- **Styling**: Tailwind CSS & Vanilla CSS
+- **State & Query**: Supabase SSR Client
+- **Internationalization (i18n)**: English & Turkish localized translations
+- **Components**: Reusable, modular UI components with state management
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## ⚙️ Configuration
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Create a `.env.local` file in the root of the `frontend/` directory:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
+NEXT_PUBLIC_API_URL="http://localhost:8000/api/v1"
+```
+
+---
+
+## 🏃 Running Locally
+
+### 1. Install Dependencies
+Run this command in the `frontend/` directory:
+```bash
+npm install
+```
+
+### 2. Start the Development Server
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser to view the application.
+
+---
+
+## 🏗️ Production Build
+
+To build the project for production:
+```bash
+npm run build
+npm run start
+```

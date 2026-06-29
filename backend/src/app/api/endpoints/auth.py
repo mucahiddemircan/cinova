@@ -1,4 +1,4 @@
-"""Kullanıcı adı ve e-posta uygunluk kontrolleri.
+"""Username and email availability checks.
 
 Gerçek kayıt ve giriş işlemleri Supabase Auth tarafından yönetilir.
 Bu endpoint'ler sadece frontend tarafında form doğrulaması için kullanılır.
@@ -19,7 +19,7 @@ async def check_username_availability(
     username: str,
     session: AsyncSession = Depends(get_session),
 ):
-    """Kullanıcı adının uygunluğunu kontrol eder."""
+    """Checks the availability of the username."""
     from app.models.user import RESERVED_USERNAMES
     
     if username.lower() in RESERVED_USERNAMES:
@@ -34,6 +34,6 @@ async def check_email_availability(
     email: str,
     session: AsyncSession = Depends(get_session),
 ):
-    """E-postanın uygunluğunu kontrol eder."""
+    """Checks the availability of the email."""
     result = await session.exec(select(User).where(User.email == email))
     return {"available": result.first() is None}

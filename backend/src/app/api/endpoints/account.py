@@ -1,4 +1,4 @@
-"""Hesap yönetimi endpointleri.
+"""Account management endpoints.
 
 Şifre oluşturma/değiştirme, e-posta değiştirme, kullanıcı adı değiştirme
 ve Google bağlantısı yönetimi işlemlerini içerir.
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/account", tags=["account"])
 
-# Kullanıcı adı değiştirme süresi (gün)
+# Username change interval (days)
 USERNAME_CHANGE_COOLDOWN_DAYS = 30
 
 
@@ -49,7 +49,7 @@ async def get_account_status(
         and current_user.auth_provider in ("google", "hybrid")
     )
     
-    # Provider email veya hybrid ise mutlaka şifresi vardır (Supabase tarafında olsa bile)
+    # If provider is email or hybrid, it definitely has a password (even if on Supabase side)
     has_password = (current_user.hashed_password is not None) or (current_user.auth_provider in ("email", "hybrid"))
     
     return AccountStatusResponse(
@@ -127,7 +127,7 @@ async def update_supabase_auth_password(access_token: str, new_password: str):
 
 
 
-# --- Yönerge 6A: Dinamik Şifre Yönetimi ---
+# --- Directive 6A: Dynamic Password Management ---
 
 
 @router.post("/set-password")
@@ -148,7 +148,7 @@ async def set_password(
             detail="Zaten bir şifreniz var. Şifreyi değiştirmek için 'Şifreni Değiştir' seçeneğini kullanın.",
         )
 
-    # Önce Supabase'de güncelle (Sync)
+    # First update in Supabase (Sync)
     auth_header = request.headers.get("Authorization")
     if not auth_header:
         raise HTTPException(status_code=401, detail="Oturum doğrulanamadı.")
@@ -157,7 +157,7 @@ async def set_password(
 
     current_user.hashed_password = get_password_hash(payload.new_password)
 
-    # Hesap hibrit duruma geçiyor
+    # Account transitions to hybrid status
     if current_user.auth_provider == "google":
         current_user.auth_provider = "hybrid"
 
@@ -179,23 +179,23 @@ async def change_password(
     Mevcut şifresi olan kullanıcılar için şifre değiştirme.
     Güvenlik gereği mevcut şifrenin doğrulanması zorunludur.
     """
-    # Doğrulama mantığı
+    # Verification logic
     is_valid = False
     if current_user.hashed_password is not None:
         is_valid = verify_password(payload.current_password, current_user.hashed_password)
     else:
-        # Hash yoksa Supabase üzerinden doğrula ve senkronize et
+        # If no hash, verify via Supabase and synchronize
         is_valid = await verify_supabase_password(current_user.email, payload.current_password)
         if is_valid:
-            # Şifreyi hemen set etmeyelim çünkü aşağıda new_password ile değişecek zaten
-            # Ama doğruluğunu teyit etmiş olduk.
+            # Do not set password immediately as it will be changed by new_password below anyway
+            # But we confirmed its validity.
             pass
 
     if not is_valid:
         logger.warning("Şifre değiştirme başarısız: Mevcut şifre hatalı. user_id=%s", current_user.id)
         raise HTTPException(status_code=400, detail="Mevcut şifreniz hatalı.")
 
-    # Yeni şifre eski şifreyle aynı olamaz
+    # New password cannot be the same as the old password
     if verify_password(payload.new_password, current_user.hashed_password) if current_user.hashed_password else payload.current_password == payload.new_password:
         logger.warning("Şifre değiştirme başarısız: Yeni şifre eskiyle aynı. user_id=%s", current_user.id)
         raise HTTPException(
@@ -203,7 +203,7 @@ async def change_password(
             detail="Yeni şifreniz mevcut şifreniz ile aynı olamaz."
         )
 
-    # Önce Supabase'de güncelle (Sync)
+    # First update in Supabase (Sync)
     auth_header = request.headers.get("Authorization")
     if not auth_header:
         raise HTTPException(status_code=401, detail="Oturum doğrulanamadı.")
@@ -218,7 +218,7 @@ async def change_password(
     return {"message": "Şifreniz başarıyla değiştirildi."}
 
 
-# --- Yönerge 6B: Güvenli E-posta Değiştirme ---
+# --- Directive 6B: Secure Email Change ---
 
 
 @router.post("/change-email")
@@ -238,21 +238,21 @@ async def change_email(
     
     has_password olan kullanıcılardan mevcut şifre sorulur.
     """
-    # Şifre doğrulama veya yeni şifre belirleme
+    # Password verification or new password setting
     if (current_user.hashed_password is not None) or (current_user.auth_provider in ("email", "hybrid")):
-        # Mevcut şifresi olan veya olması gereken kullanıcılar
+        # Users who have or should have an existing password
         if not payload.current_password:
             raise HTTPException(
                 status_code=400,
                 detail="Güvenlik için mevcut şifrenizi girmelisiniz.",
             )
             
-        # Doğrulama mantığı
+        # Verification logic
         is_valid = False
         if current_user.hashed_password is not None:
             is_valid = verify_password(payload.current_password, current_user.hashed_password)
         else:
-            # Hash yoksa Supabase üzerinden doğrula ve senkronize et
+            # If no hash, verify via Supabase and synchronize
             is_valid = await verify_supabase_password(current_user.email, payload.current_password)
             if is_valid:
                 current_user.hashed_password = get_password_hash(payload.current_password)
@@ -263,7 +263,7 @@ async def change_email(
         if not is_valid:
             raise HTTPException(status_code=400, detail="Mevcut şifreniz hatalı.")
             
-        # Eğer ilk şifresini belirliyorsa (Google-only) Supabase'e de gönder
+        # If setting initial password (Google-only), send to Supabase as well
         if not current_user.hashed_password and payload.new_password:
             auth_header = request.headers.get("Authorization")
             if auth_header:
@@ -272,14 +272,14 @@ async def change_email(
 
         if not current_user.hashed_password and payload.new_password:
             current_user.hashed_password = get_password_hash(payload.new_password)
-            # Şifre eklendiği için artık hibrit
+            # Hybrid now since password is added
             if current_user.auth_provider == "google":
                 current_user.auth_provider = "hybrid"
             
             session.add(current_user)
             await session.commit()
 
-    # Yeni e-posta başka hesapta kullanılıyor mu?
+    # Is the new email used by another account?
     existing = await session.exec(
         select(User).where(User.email == payload.new_email)
     )
@@ -289,8 +289,8 @@ async def change_email(
             detail="Bu e-posta adresi zaten kullanımda.",
         )
 
-    # Supabase tarafında e-posta güncelleme isteği frontend'den yapılacak.
-    # Backend sadece yetkilendirme ve kontrol yapar.
+    # Email update request on Supabase side will be done from frontend.
+    # Backend only handles authorization and checking.
     logger.info(
         "E-posta değişikliği istendi: user_id=%s, yeni_email=%s",
         current_user.id, payload.new_email,
@@ -301,7 +301,7 @@ async def change_email(
     }
 
 
-# --- Yönerge 6C: Kullanıcı Adı Değiştirme ---
+# --- Directive 6C: Username Change ---
 
 
 @router.post("/change-username")
@@ -314,7 +314,7 @@ async def change_username(
     Kullanıcı adı değiştirme (30 gün sınırı ile).
     has_password olan kullanıcılardan mevcut şifre sorulur.
     """
-    # Şifre doğrulama (has_password ise)
+    # Password verification (if has_password)
     if (current_user.hashed_password is not None) or (current_user.auth_provider in ("email", "hybrid")):
         if not payload.current_password:
             raise HTTPException(
@@ -322,12 +322,12 @@ async def change_username(
                 detail="Güvenlik için mevcut şifrenizi girmelisiniz.",
             )
             
-        # Doğrulama mantığı
+        # Verification logic
         is_valid = False
         if current_user.hashed_password is not None:
             is_valid = verify_password(payload.current_password, current_user.hashed_password)
         else:
-            # Hash yoksa Supabase üzerinden doğrula ve senkronize et
+            # If no hash, verify via Supabase and synchronize
             is_valid = await verify_supabase_password(current_user.email, payload.current_password)
             if is_valid:
                 current_user.hashed_password = get_password_hash(payload.current_password)
@@ -338,7 +338,7 @@ async def change_username(
         if not is_valid:
             raise HTTPException(status_code=400, detail="Mevcut şifreniz hatalı.")
 
-    # 30 gün sınırı kontrolü
+    # 30-day limit check
     if current_user.username_changed_at:
         last_change = datetime.fromisoformat(current_user.username_changed_at)
         cooldown_end = last_change + timedelta(days=USERNAME_CHANGE_COOLDOWN_DAYS)
@@ -350,7 +350,7 @@ async def change_username(
                 detail=f"Kullanıcı adınızı {remaining_days} gün sonra değiştirebilirsiniz.",
             )
 
-    # Benzersizlik kontrolü
+    # Uniqueness check
     if payload.new_username != current_user.username:
         existing = await session.exec(
             select(User).where(User.username == payload.new_username)

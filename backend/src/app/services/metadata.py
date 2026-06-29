@@ -5,11 +5,11 @@ from typing import Any
 
 from app.services import tmdb_client
 
-# Önbellek: {cache_key: {"data": value, "expiry": timestamp}}
+# Cache: {cache_key: {"data": value, "expiry": timestamp}}
 _metadata_cache = {}
-CACHE_TTL = 3600 * 24  # 24 saat (Metadata nadir değişir)
+CACHE_TTL = 3600 * 24  # 24 hours (Metadata rarely changes)
 
-# Yerel çeviri dosyası
+# Local translation file
 LOCAL_TRANSLATIONS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "constants", "translations.json"
 )
@@ -49,16 +49,16 @@ class MetadataService:
         return {c["iso_3166_1"]: c.get("native_name") or c.get("english_name") for c in countries_list}
 
     async def get_languages(self) -> dict[str, str]:
-        """Tüm dillerin (iso_639_1: english_name) mapini döner."""
+        """Returns a map of all languages (iso_639_1: english_name)."""
         cache_key = "languages:all"
         lang_list = await self.get_cached_metadata(
             cache_key, tmdb_client.get_languages
         )
-        # TMDB diller listesi genelde {iso_639_1, english_name, name} döner.
+        # TMDB languages list generally returns {iso_639_1, english_name, name}.
         return {l["iso_639_1"]: l.get("english_name") or l.get("name") for l in lang_list}
 
     async def get_watch_providers(self, media_type: str, region: str = "TR", lang: str = "tr-TR") -> list[dict]:
-        """Belirli bir bölgedeki izleme servislerini getirir."""
+        """Gets watch providers in a specific region."""
         cache_key = f"watch_providers:{media_type}:{region}:{lang}"
         providers_list = await self.get_cached_metadata(
             cache_key, lambda: tmdb_client.get_all_watch_providers(media_type, region, lang)

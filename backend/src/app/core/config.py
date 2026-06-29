@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Uygulama genelinde kullanılan ayarlar. Değerler .env dosyasından okunur."""
+    """Application-wide settings. Values are read from the .env file."""
 
     SECRET_KEY: str = "gizli-anahtar-degistirin"
     DATABASE_URL: str = "postgresql+asyncpg://user:pass@localhost/dbname"
@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     TMDB_API_KEY: str = "your_api_key"
     TMDB_BASE_URL: str = "https://api.themoviedb.org/3"
     TMDB_IMAGE_BASE_URL: str = "https://image.tmdb.org/t/p/w500"
+    GOOGLE_API_KEY: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

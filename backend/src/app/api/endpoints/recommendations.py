@@ -1,4 +1,4 @@
-"""Kişiselleştirilmiş içerik öneri endpointleri.
+"""Personalized content recommendation endpoints.
 
 Takip edilen kişilerin yeni işleri, tür bazlı keşif ve
 mevcut listeye benzer içerik önerilerini sunar.
@@ -26,6 +26,7 @@ from app.models import (
     PersonalizedRecommendationsRead,
 )
 from app.services import tmdb_client
+from app.services.recommendation_engine import engine
 from app.utils.i18n_utils import translate_job, resolve_person_name, translate_role_name
 from app.utils.content_converters import transform_content, merge_person_data
 
@@ -37,7 +38,7 @@ CACHE_EXPIRY_SECONDS = 3600  # 1 saat
 
 
 def invalidate_user_cache(user_id: int):
-    """Kullanıcının öneri cache'ini temizler.
+    """Clears the user's recommendation cache.
     
     Watchlist, interaction veya follow değişikliklerinde çağrılmalıdır.
     """
@@ -45,12 +46,12 @@ def invalidate_user_cache(user_id: int):
 
 
 # ──────────────────────────────────────────────────────────
-# Yardımcı Fonksiyonlar
+# Helper Functions
 # ──────────────────────────────────────────────────────────
 
 
 async def _get_excluded_content_ids(user_id: int, session: AsyncSession) -> set[int]:
-    """Kullanıcının zaten bildiği (watchlist + etkileşim) tüm TMDB ID'lerini toplar."""
+    """Collects all TMDB IDs the user already knows (watchlist + interactions)."""
     result = await session.exec(
         select(LibraryItem.tmdb_id).where(LibraryItem.user_id == user_id)
     )
@@ -58,7 +59,7 @@ async def _get_excluded_content_ids(user_id: int, session: AsyncSession) -> set[
 
 
 def _calculate_seed_weight(item: LibraryItem) -> float:
-    """LibraryItem öğesine 'bu içerikten yeni öneri üretme potansiyeli' skoru verir.
+    """Gives a score of 'potential to generate new recommendations from this content' to LibraryItem.
     
     Ağırlık faktörleri:
     - Status: is_watched → yüksek, is_watchlist → orta
@@ -68,7 +69,7 @@ def _calculate_seed_weight(item: LibraryItem) -> float:
     """
     weight = 1.0
     
-    # 1. Durum ağırlıkları
+    # 1. Status weights
     if item.is_watched:
         weight *= 2.0
     if item.is_liked:
@@ -76,11 +77,7 @@ def _calculate_seed_weight(item: LibraryItem) -> float:
     if item.is_watchlist and not item.is_watched:
         weight *= 0.5
     
-    # 2. Rating ağırlığı (varsa)
-    if item.rating:
-        weight *= (item.rating / 10.0) * 2  # 10/10 → 2x, 5/10 → 1x
-    
-    # 3. Recency — yeni eklenenler daha önemli
+    # 3. Recency — newly added are more important
     if item.created_at:
         try:
             # Ensure timezone awareness
@@ -89,7 +86,7 @@ def _calculate_seed_weight(item: LibraryItem) -> float:
                 created_at = created_at.replace(tzinfo=timezone.utc)
                 
             months_ago = (utc_now() - created_at).days / 30
-            weight *= math.exp(-0.05 * months_ago)  # ~14 ayda yarı değer
+            weight *= math.exp(-0.05 * months_ago)  # ~14 months half-life
         except Exception:
             pass
     
@@ -97,7 +94,7 @@ def _calculate_seed_weight(item: LibraryItem) -> float:
 
 
 def _score_recommendation(item: dict) -> float:
-    """Önerilen içeriğe vote + popularity bazlı alaka skoru verir."""
+    """Gives relevance score to recommended content based on votes + popularity."""
     vote = item.get("vote_average", 0) or 0
     pop = item.get("popularity", 0) or 0
     
@@ -108,7 +105,7 @@ def _score_recommendation(item: dict) -> float:
 
 
 def _calculate_genre_weight(item_created_at: datetime, base_weight: float) -> float:
-    """Etkileşim tarihine göre time-decay ağırlık hesaplar.
+    """Calculates time-decay weight based on interaction date.
     
     Her ay %8 azalır, ~8 ayda yarı değer.
     """
@@ -136,10 +133,10 @@ def _calculate_genre_weight(item_created_at: datetime, base_weight: float) -> fl
 
 
 def _score_followed_work(item: dict, rel_date: str) -> float:
-    """Takip edilen kişilerin işlerini tarih + kalite ile skorlar."""
+    """Scores followed people's works by date + quality."""
     score = 0.0
     
-    # 1. Tarih yakınlığı
+    # 1. Date proximity
     if rel_date:
         try:
             release = datetime.strptime(rel_date, "%Y-%m-%d")
@@ -147,10 +144,10 @@ def _score_followed_work(item: dict, rel_date: str) -> float:
             days_diff = (release - now).days
             
             if days_diff > 0:
-                # Yakında çıkacak → yüksek boost
+                # Upcoming -> high boost
                 score += max(2.0 - (days_diff / 180), 0.5)
             else:
-                # Geçmişte çıkmış → recency skoru
+                # Released in the past -> recency score
                 score += max(1.5 - (abs(days_diff) / 365), 0)
         except ValueError:
             pass
@@ -159,7 +156,7 @@ def _score_followed_work(item: dict, rel_date: str) -> float:
     vote = item.get("vote_average", 0) or 0
     score += (vote / 10.0) * 1.0
     
-    # 3. Popülerlik
+    # 3. Popularity
     pop = item.get("popularity", 0) or 0
     score += min(math.log10(max(pop, 1)) / 3, 0.5)
     
@@ -177,46 +174,59 @@ async def get_personalized_recommendations(
     session: AsyncSession = Depends(get_session),
     lang_config: dict = Depends(get_lang_config),
 ):
-    """Kullanıcıya özel önerileri (takip ettikleri, sevdiği türler, listeleri) bir arada getirir.
+    """Brings personalized recommendations together (followed people, liked genres, lists).
     
     Her kategori film ve dizi olarak ayrı ayrı döndürülür.
     Performans için 1 saatlik basit bir cache mekanizması kullanılır.
     """
     now = utc_now()
     
-    # Cache kontrolü
+    # Cache check
     if current_user.id in _recommendations_cache:
         cache_entry = _recommendations_cache[current_user.id]
         if (now - cache_entry["timestamp"]).total_seconds() < CACHE_EXPIRY_SECONDS:
             return cache_entry["data"]
 
-    # 1. Ortak verileri SEQUENTIAL (SIRALI) çekerek InterfaceError'u önle
+    # 1. Fetch common data SEQUENTIAL to prevent InterfaceError
     # Negatif filtreleme seti
     excluded_ids = await _get_excluded_content_ids(current_user.id, session)
     
-    # Takip edilen kişiler
+    # Followed people
     follow_result = await session.exec(select(Follow).where(Follow.follower_id == current_user.id))
     follows = follow_result.all()
     
-    # İzleme listesi ve Etkileşimler (Tümü)
+    # Watchlist and Interactions (All)
     library_result = await session.exec(select(LibraryItem).where(LibraryItem.user_id == current_user.id))
     library_items = library_result.all()
     
-    # Seed verileri ayır
+    # Separate seed data
     watchlist_seeds = [i for i in library_items if i.is_watchlist or i.is_watched]
     
-    # 2. API çağrılarını PARALEL çalıştır (Session kullanmadan)
+    # 2. Create ML Profile Vector (Only from liked or highly rated content)
+    profile_seeds = [i for i in library_items if i.is_liked][:10]
+    user_profile_vector = None
+    if profile_seeds:
+        # Fetch details in batches (for overview)
+        seed_details = await tmdb_client.get_batch_details(
+            [(i.media_type, i.tmdb_id) for i in profile_seeds],
+            lang_config=lang_config
+        )
+        descriptions = [d.get("overview") for d in seed_details if d.get("overview")]
+        if descriptions:
+            user_profile_vector = engine.calculate_user_profile_vector(descriptions)
+    
+    # 3. Run API calls in PARALLEL (without session)
     followed_works_task = _get_followed_persons_works(follows, excluded_ids, lang_config=lang_config)
-    genre_recs_task = _get_genre_based_recommendations(library_items, excluded_ids, lang_config=lang_config)
-    list_recs_task = _get_list_based_recommendations(watchlist_seeds, excluded_ids, lang_config=lang_config)
+    genre_recs_task = _get_genre_based_recommendations(library_items, excluded_ids, lang_config=lang_config, user_profile_vector=user_profile_vector)
+    list_recs_task = _get_list_based_recommendations(watchlist_seeds, excluded_ids, lang_config=lang_config, user_profile_vector=user_profile_vector)
 
-    # return_exceptions=True ile bir task çökse bile diğerleri devam eder
+    # With return_exceptions=True, even if one task fails, others continue
     results = await asyncio.gather(
         followed_works_task, genre_recs_task, list_recs_task,
         return_exceptions=True
     )
     
-    # Sonuçları güvenli şekilde ayıkla
+    # Extract results safely
     def safe_get(res, key):
         if isinstance(res, Exception):
             import logging
@@ -237,7 +247,7 @@ async def get_personalized_recommendations(
         "list_recommendations_series": safe_get(list_result, "series"),
     }
     
-    # Cache'e kaydet (sadece veriler tamsa veya makul ölçüde veri varsa)
+    # Save to cache (only if data is complete or reasonably filled)
     _recommendations_cache[current_user.id] = {
         "data": recommendations,
         "timestamp": now
@@ -252,11 +262,11 @@ async def get_type_recommendations(
     session: AsyncSession,
     lang_config: dict
 ) -> dict:
-    """Belirli bir medya türü (movie/series) için tüm kişiselleştirilmiş önerileri birleştirir.
+    """Combines all personalized recommendations for a specific media type (movie/series).
     
     CategoryView (Daha Fazla Gör) sayfası için kullanılır.
     """
-    # Önce cache kontrolü (Eğer ana personalized cache varsa oradan ayıkla)
+    # First check cache (extract from main personalized cache if exists)
     now = utc_now()
     if user.id in _recommendations_cache:
         cache_entry = _recommendations_cache[user.id]
@@ -265,7 +275,7 @@ async def get_type_recommendations(
             merged = []
             seen_ids = set()
             
-            # İlgili medya türündeki tüm kategorileri birleştir
+            # Combine all categories in the related media type
             suffix = "movies" if media_type == "movie" else "series"
             for key in [f"followed_works_{suffix}", f"genre_recommendations_{suffix}", f"list_recommendations_{suffix}"]:
                 for item in data.get(key, []):
@@ -280,7 +290,7 @@ async def get_type_recommendations(
                 "total_results": len(merged)
             }
 
-    # Cache yoksa veya eskiyse, verileri çek (personalized logic'in basitleştirilmiş hali)
+    # If cache doesn't exist or is expired, fetch data (simplified personalized logic)
     excluded_ids = await _get_excluded_content_ids(user.id, session)
     follow_result = await session.exec(select(Follow).where(Follow.follower_id == user.id))
     follows = follow_result.all()
@@ -288,10 +298,22 @@ async def get_type_recommendations(
     library_items = library_result.all()
     watchlist_seeds = [i for i in library_items if i.is_watchlist or i.is_watched]
 
+    # Create ML Profile Vector
+    profile_seeds = [i for i in library_items if i.is_liked][:10]
+    user_profile_vector = None
+    if profile_seeds:
+        seed_details = await tmdb_client.get_batch_details(
+            [(i.media_type, i.tmdb_id) for i in profile_seeds],
+            lang_config=lang_config
+        )
+        descriptions = [d.get("overview") for d in seed_details if d.get("overview")]
+        if descriptions:
+            user_profile_vector = engine.calculate_user_profile_vector(descriptions)
+
     results = await asyncio.gather(
         _get_followed_persons_works(follows, excluded_ids, lang_config=lang_config),
-        _get_genre_based_recommendations(library_items, excluded_ids, lang_config=lang_config),
-        _get_list_based_recommendations(watchlist_seeds, excluded_ids, lang_config=lang_config),
+        _get_genre_based_recommendations(library_items, excluded_ids, lang_config=lang_config, user_profile_vector=user_profile_vector),
+        _get_list_based_recommendations(watchlist_seeds, excluded_ids, lang_config=lang_config, user_profile_vector=user_profile_vector),
         return_exceptions=True
     )
 
@@ -317,26 +339,26 @@ async def get_type_recommendations(
 
 
 # ──────────────────────────────────────────────────────────
-# Algoritma 1: Takip Edilen Kişilerin Yeni İşleri
+# Algorithm 1: New Works of Followed People
 # ──────────────────────────────────────────────────────────
 
 
 async def _get_followed_persons_works(
     follows: list[Follow], excluded_ids: set[int], lang_config: dict | None = None
 ) -> dict[str, list]:
-    """Kullanıcının takip ettiği kişilerin yeni/gelecek işlerini getirir.
+    """Gets new/upcoming works of people followed by the user.
     """
     person_ids = [f.followed_person_id for f in follows if f.followed_person_id]
     
     if not person_ids:
         return {"movies": [], "series": []}
 
-    # Dinamik tarih sınırları
+    # Dynamic date boundaries
     now_dt = utc_now()
     cutoff_date = (now_dt - timedelta(days=365)).strftime("%Y-%m-%d")
     future_cutoff = (now_dt + timedelta(days=365)).strftime("%Y-%m-%d")
 
-    # API rate limit koruması — max 5 eşzamanlı istek
+    # API rate limit protection — max 5 concurrent requests
     MAX_PERSONS = 15
     semaphore = asyncio.Semaphore(5)
     
@@ -388,7 +410,7 @@ async def _get_followed_persons_works(
                     else:
                         grouped_works[w_id]["persons"][p_id]["roles"].add(role)
         
-        # Crew (Yönetmen vb)
+        # Crew (Director etc)
         for crew_item in credits.get("crew", []):
             w_id = crew_item.get("id")
             rel_date = crew_item.get("release_date") or crew_item.get("first_air_date")
@@ -416,7 +438,7 @@ async def _get_followed_persons_works(
                     else:
                         grouped_works[w_id]["persons"][p_id]["roles"].add(role)
 
-    # Final listeleri oluştur — film ve dizi ayrı
+    # Create final lists — movie and series separately
     movies_list = []
     series_list = []
     
@@ -428,11 +450,11 @@ async def _get_followed_persons_works(
             roles_str = ", ".join(sorted(list(p_data["roles"])))
             person_strings.append(f"{p_data['name']}: {roles_str}")
         
-        # @pers@ prefix'i ve yeni satır ayracı
+        # @pers@ prefix and newline separator
         content["description"] = "@pers@" + "\n".join(person_strings)
         content["role"] = None
         
-        # Hibrit sıralama skoru ekle
+        # Add hybrid ranking score
         content["_score"] = _score_followed_work(content, data["rel_date"])
         
         if data["media_type"] in ("tv", "series"):
@@ -440,7 +462,7 @@ async def _get_followed_persons_works(
         else:
             movies_list.append(content)
 
-    # Skora göre sırala
+    # Sort by score
     movies_list.sort(key=lambda x: x.pop("_score", 0), reverse=True)
     series_list.sort(key=lambda x: x.pop("_score", 0), reverse=True)
     
@@ -451,14 +473,17 @@ async def _get_followed_persons_works(
 
 
 # ──────────────────────────────────────────────────────────
-# Algoritma 2: Tür Bazlı Öneriler
+# Algorithm 2: Genre-Based Recommendations
 # ──────────────────────────────────────────────────────────
 
 
 async def _get_genre_based_recommendations(
-    library_items: list[LibraryItem], excluded_ids: set[int], lang_config: dict | None = None
+    library_items: list[LibraryItem], 
+    excluded_ids: set[int], 
+    lang_config: dict | None = None,
+    user_profile_vector: any = None
 ) -> dict[str, list]:
-    """Kullanıcının listelerindeki ve beğendiği içeriklerin türlerine göre öneriler getirir.
+    """Gets recommendations based on genres of content in user's lists and liked items.
     """
     genre_counts = Counter()
     
@@ -467,7 +492,7 @@ async def _get_genre_based_recommendations(
             try:
                 g_ids = [int(g.strip()) for g in item.genre_ids.split(",") if g.strip().isdigit()]
                 
-                # Ağırlık hesapla (is_watched, is_liked, is_watchlist)
+                # Calculate weight (is_watched, is_liked, is_watchlist)
                 base_weight = 1.0
                 if item.is_liked:
                     base_weight = 3.0
@@ -487,10 +512,10 @@ async def _get_genre_based_recommendations(
     if not genre_counts:
         return {"movies": [], "series": []}
 
-    # En çok tercih edilen top 4 türü al
+    # Get top 4 most preferred genres
     top_genres = [(gid, score) for gid, score in genre_counts.most_common(4)]
     
-    # Her tür için ayrı Discover çağrısı — film ve dizi ayrı ayrı (paralel)
+    # Separate Discover call for each genre — movie and series separately (parallel)
     discover_tasks = []
     task_meta = []  # (genre_score, media_type) bilgisi
     
@@ -528,7 +553,7 @@ async def _get_genre_based_recommendations(
             
             lang = lang_config["lang"] if lang_config else "tr"
             content = transform_content(item, lang=lang)
-            # Tür ağırlığı + TMDB vote ile hibrit skor
+            # Hybrid score with genre weight + TMDB vote
             rec_score = (genre_score * 0.4) + _score_recommendation(content) * 10
             content["_rec_score"] = rec_score
             
@@ -537,9 +562,14 @@ async def _get_genre_based_recommendations(
             else:
                 movies_pool.append(content)
 
-    # Skora göre sırala ve temizle
+    # Sort by score and clean up
     movies_pool.sort(key=lambda x: x.pop("_rec_score", 0), reverse=True)
     series_pool.sort(key=lambda x: x.pop("_rec_score", 0), reverse=True)
+    
+    # ML Reranking (if user profile exists)
+    if user_profile_vector is not None:
+        movies_pool = engine.rerank(user_profile_vector, movies_pool)
+        series_pool = engine.rerank(user_profile_vector, series_pool)
     
     return {
         "movies": movies_pool[:15],
@@ -548,33 +578,36 @@ async def _get_genre_based_recommendations(
 
 
 # ──────────────────────────────────────────────────────────
-# Algoritma 3: Listelere Benzer İçerik Önerileri
+# Algorithm 3: Content Recommendations Similar to Lists
 # ──────────────────────────────────────────────────────────
 
 
 async def _get_list_based_recommendations(
-    watchlist_items: list[LibraryItem], excluded_ids: set[int], lang_config: dict | None = None
+    watchlist_items: list[LibraryItem], 
+    excluded_ids: set[int], 
+    lang_config: dict | None = None,
+    user_profile_vector: any = None
 ) -> dict[str, list]:
-    """Listelerdeki spesifik içeriklere benzer öneriler getirir.
+    """Gets recommendations similar to specific content in lists.
     """
     if not watchlist_items:
         return {"movies": [], "series": []}
     
-    # Film ve dizi seed'lerini ayır
+    # Separate movie and series seeds
     movie_items = [i for i in watchlist_items if i.media_type == "movie"]
     series_items = [i for i in watchlist_items if i.media_type in ("series", "tv")]
     
     async def _get_recs_for_type(type_items: list, tmdb_media_type: str) -> list:
-        """Belirli bir medya türü için ağırlıklı seed seçimi ve öneri üretimi."""
+        """Weighted seed selection and recommendation generation for a specific media type."""
         if not type_items:
             return []
         
-        # Ağırlıklı seed seçimi
+        # Weighted seed selection
         weights = [_calculate_seed_weight(item) for item in type_items]
         k = min(len(type_items), 5)
         selected_items = random.choices(type_items, weights=weights, k=k)
         
-        # Seçelen seed'lerden benzerleri çek (paralel)
+        # Fetch similar items from selected seeds (parallel)
         tasks = [tmdb_client.get_recommendations(tmdb_media_type, item.tmdb_id, lang_config=lang_config) for item in selected_items]
         recs_data_list = await asyncio.gather(*tasks, return_exceptions=True)
         
@@ -597,15 +630,20 @@ async def _get_list_based_recommendations(
                 content["_rec_score"] = _score_recommendation(content)
                 all_recs.append(content)
         
-        # Skora göre sırala ve temizle
+        # Sort by score and clean up
         all_recs.sort(key=lambda x: x.pop("_rec_score", 0), reverse=True)
         return all_recs[:15]
     
-    # Film ve dizi önerilerini paralel çek
+    # Fetch movie and series recommendations in parallel
     movies_recs, series_recs = await asyncio.gather(
         _get_recs_for_type(movie_items, "movie"),
         _get_recs_for_type(series_items, "series"),
     )
+    
+    # ML Reranking (if user profile exists)
+    if user_profile_vector is not None:
+        movies_recs = engine.rerank(user_profile_vector, movies_recs)
+        series_recs = engine.rerank(user_profile_vector, series_recs)
     
     return {
         "movies": movies_recs,

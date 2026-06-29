@@ -15,7 +15,7 @@ async def get_metadata_config(accept_language: str = Header("tr-TR")):
     series_genres = await metadata_service.get_genres("series", lang)
     countries = await metadata_service.get_countries(lang)
     
-    # Yerel çevirileri de ekle (Frontend'in departman/rol çevirileri için)
+    # Also add local translations (for frontend department/role translations)
     l_code = lang[:2].lower()
     local = metadata_service.translations.get(l_code, metadata_service.translations.get("tr", {}))
     

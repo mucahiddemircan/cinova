@@ -15,7 +15,7 @@ engine = create_async_engine(
 
 
 async def get_session():
-    """Her istek için bağımsız bir veritabanı oturumu oluşturur."""
+    """Creates an independent database session for each request."""
     async_session = sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )

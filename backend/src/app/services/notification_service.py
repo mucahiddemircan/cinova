@@ -13,8 +13,8 @@ class NotificationService:
         self.session = session
 
     async def get_user_notifications(self, user_id: int, limit: int = 20, offset: int = 0) -> List[NotificationRead]:
-        """Kullanıcının bildirimlerini döner (en yeni önce)."""
-        # Beğeni sayılarını topluca almak için subquery (sadece like)
+        """Returns user's notifications (newest first)."""
+        # Subquery to batch fetch like counts (only likes)
         likes_count_sub = (
             select(CommentInteraction.comment_id, func.count(CommentInteraction.id).label("count"))
             .where(CommentInteraction.interaction_type == "like")
@@ -40,10 +40,10 @@ class NotificationService:
 
         notifications = []
         for notif, actor_username, actor_avatar_url, likes_count in results:
-            # Beğeni ise gerçek sayıyı kullan, değilse 1 varsay
+            # Use actual count if it is a like, otherwise default to 1
             display_count = likes_count if notif.type == NotificationType.COMMENT_LIKE else 1
             
-            # Beğeni ise aktör bilgilerini anonimleştir
+            # Anonymize actor information if it is a like
             if notif.type == NotificationType.COMMENT_LIKE:
                 display_username = ""
                 actor_avatar_url = None
@@ -71,7 +71,7 @@ class NotificationService:
         return notifications
 
     async def get_unread_count(self, user_id: int) -> int:
-        """Okunmamış bildirim sayısını döner."""
+        """Returns unread notification count."""
         count = (await self.session.exec(
             select(func.count()).where(
                 and_(
@@ -83,7 +83,7 @@ class NotificationService:
         return count or 0
 
     async def mark_all_as_read(self, user_id: int) -> int:
-        """Tüm bildirimleri okundu olarak işaretler."""
+        """Marks all notifications as read."""
         query = select(Notification).where(
             and_(
                 Notification.user_id == user_id,
@@ -101,7 +101,7 @@ class NotificationService:
         return len(notifications)
 
     async def mark_as_read(self, notification_id: int, user_id: int) -> bool:
-        """Tek bir bildirimi okundu olarak işaretler."""
+        """Marks a single notification as read."""
         notif = await self.session.get(Notification, notification_id)
         if not notif or notif.user_id != user_id:
             return False
@@ -112,7 +112,7 @@ class NotificationService:
         return True
 
     async def delete_notification(self, notification_id: int, user_id: int) -> bool:
-        """Bir bildirimi siler."""
+        """Deletes a notification."""
         notif = await self.session.get(Notification, notification_id)
         if not notif or notif.user_id != user_id:
             return False
@@ -122,7 +122,7 @@ class NotificationService:
         return True
 
     def _build_message(self, notification_type: str, actor_username: str, count: int = 1) -> str:
-        """Bildirim tipine göre mesaj oluşturur."""
+        """Creates message according to notification type."""
         if notification_type == NotificationType.COMMENT_LIKE:
             return f"Yorumunuzu {count} kişi beğendi."
         
@@ -142,7 +142,7 @@ class NotificationService:
         tmdb_id: int | None = None,
         media_type: str | None = None,
     ) -> None:
-        """Bildirim oluşturur, kaydeder ve SSE ile gönderir."""
+        """Creates, saves, and sends notification via SSE."""
         if user_id == actor_id:
             return
 
@@ -178,7 +178,7 @@ class NotificationService:
         await self.session.commit()
         await self.session.refresh(notification)
 
-        # SSE Gönderimi için veri hazırla
+        # Prepare data for SSE dispatch
         display_count = 1
         display_username = actor_username
         

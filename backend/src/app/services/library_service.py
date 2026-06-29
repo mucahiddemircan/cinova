@@ -14,7 +14,7 @@ class LibraryService:
         self.session = session
 
     async def toggle_action(self, user_id: int, payload: LibraryItemCreate) -> dict:
-        """Kütüphane aksiyonunu (watchlist, watched, like, dislike) işler."""
+        """Processes library action (watchlist, watched, like, dislike)."""
         m_type = MediaType.standardize(payload.media_type)
         
         query = await self.session.exec(
@@ -75,7 +75,7 @@ class LibraryService:
         return {"status": "success", "action": payload.action, "value": payload.value}
 
     async def get_summary(self, username: str, current_user: User | None = None, lang_config: dict | None = None) -> dict:
-        """Kullanıcının kütüphane özetini döner."""
+        """Returns the user's library summary."""
         if username == "me":
             if not current_user:
                 raise HTTPException(status_code=401, detail="Unauthorized")
@@ -135,7 +135,7 @@ class LibraryService:
         return summary
 
     async def get_content_status(self, user_id: int, media_type: str, tmdb_id: int) -> dict:
-        """Bir içeriğin kullanıcının kütüphanesindeki durumunu döner."""
+        """Returns the status of a content in the user's library."""
         m_type = MediaType.standardize(media_type)
         
         query = await self.session.exec(
@@ -168,7 +168,7 @@ class LibraryService:
         current_user: User | None = None,
         lang_config: dict | None = None
     ) -> List[dict]:
-        """Kullanıcının kütüphane listesini getirir."""
+        """Gets the user's library list."""
         if username == "me":
             if not current_user:
                 raise HTTPException(status_code=401, detail="Unauthorized")
@@ -226,7 +226,7 @@ class LibraryService:
         return hydrated
 
     async def get_full_me_summary(self, current_user: User, lang_config: dict | None = None) -> dict:
-        """Giriş yapmış kullanıcının tüm kütüphane verilerini döner."""
+        """Returns all library data of the logged-in user."""
         # Library Items Status Map
         query = await self.session.exec(
             select(LibraryItem).where(LibraryItem.user_id == current_user.id)

@@ -11,15 +11,15 @@ from app.utils.i18n_utils import (
 def merge_list_results(
     primary_results: list[dict], secondary_results: list[dict] | None, is_person: bool = False
 ) -> list[dict]:
-    """İki dildeki liste sonuçlarını birleştirir. Yedek verileri _fallback_ ile saklar.
-    Her iki listedeki benzersiz öğeleri birleştirir (Union).
+    """Merges list results in two languages. Stores backup data in _fallback_.
+    Merges unique items in both lists (Union).
     """
     secondary_results = secondary_results or []
     sec_map = {item.get("id"): item for item in secondary_results if item.get("id")}
     merged_list = []
     seen_ids = set()
 
-    # 1. Birincil sonuçları işle (ve ikincil verilerle zenginleştir)
+    # 1. Process primary results (and enrich with secondary data)
     for p_item in primary_results:
         item_id = p_item.get("id")
         if not item_id:
@@ -37,14 +37,14 @@ def merge_list_results(
             merged_item["_fallback_title"] = s_item.get("title") or s_item.get("name")
             merged_item["_fallback_overview"] = s_item.get("overview")
 
-        # Görsel fallback
+        # Image fallback
         for field in ("poster_path", "backdrop_path", "profile_path"):
             if not merged_item.get(field) and s_item.get(field):
                 merged_item[field] = s_item.get(field)
 
         merged_list.append(merged_item)
 
-    # 2. Sadece ikincil sonuçlarda olanları ekle (Fallback)
+    # 2. Add items that only exist in secondary results (Fallback)
     for s_item in secondary_results:
         item_id = s_item.get("id")
         if not item_id or item_id in seen_ids:
@@ -65,7 +65,7 @@ def merge_list_results(
 
 
 def merge_content_data(primary_data: dict, secondary_data: dict | None) -> dict:
-    """Birincil ve ikincil içerik verisini birleştirir."""
+    """Merges primary and secondary content data."""
     merged = {**primary_data}
     s_data = secondary_data or {}
 
@@ -106,7 +106,7 @@ def merge_content_data(primary_data: dict, secondary_data: dict | None) -> dict:
 
 
 def merge_person_data(primary_data: dict, secondary_data: dict | None) -> dict:
-    """Birincil ve ikincil kişi verisini birleştirir."""
+    """Merges primary and secondary person data."""
     merged = {**primary_data}
     s_data = secondary_data or {}
 
@@ -132,7 +132,7 @@ def merge_person_data(primary_data: dict, secondary_data: dict | None) -> dict:
 
 
 def extract_certification(item: dict, media_type: str) -> str | None:
-    """TMDB verisinden yaş sınırını (certification) ayıklar."""
+    """Extracts age limit (certification) from TMDB data."""
     if media_type == "movie":
         results = item.get("release_dates", {}).get("results", [])
         for country in ["TR", "US"]:
@@ -163,7 +163,7 @@ def extract_certification(item: dict, media_type: str) -> str | None:
 
 
 def transform_content(item: dict, backdrop_size: str = "w1280", lang: str = "tr") -> dict:
-    """TMDB içerik verisini ContentReadBasic şemasına dönüştürür."""
+    """Transforms TMDB content data to ContentReadBasic schema."""
     media_type = item.get("media_type")
     if not media_type:
         media_type = "movie" if "title" in item else "series"
@@ -173,20 +173,20 @@ def transform_content(item: dict, backdrop_size: str = "w1280", lang: str = "tr"
 
     display_title, original_title = resolve_title(item, lang)
     
-    # Overview Çözümleme
+    # Overview Resolution
     overview = item.get("overview")
     fallback_overview = item.get("_fallback_overview")
     
     if lang[:2].lower() == "en":
         display_overview = overview or fallback_overview
     else:
-        # Eğer TR veri orijinal veriye çok benziyorsa (boşsa veya orijinal dil ise) yedek dile düş
+        # If TR data is very similar to original data (empty or original language), fall back to backup language
         if (not overview or overview == "") and fallback_overview:
             display_overview = fallback_overview
         else:
             display_overview = overview or fallback_overview
 
-    # Görsel Çözümleme Heuristics
+    # Image Resolution Heuristics
     p_poster = item.get("poster_path")
     f_poster = item.get("_fallback_poster_path")
     p_backdrop = item.get("backdrop_path")
@@ -200,8 +200,8 @@ def transform_content(item: dict, backdrop_size: str = "w1280", lang: str = "tr"
     final_poster = p_poster or f_poster
     final_backdrop = p_backdrop or f_backdrop
     
-    # Başlıkta Latin alfabesi veya eksiklikten dolayı fallback'e düşüldüyse, 
-    # posterde de İngilizceyi tercih et (Orijinal poster muhtemelen non-latin olduğu için).
+    # If fallback was used due to non-Latin alphabet or missing data in title,
+    # prefer English in the poster as well (since the original poster is likely non-Latin).
     if f_poster and f_poster != p_poster:
         if not is_latin(localized_title) and is_latin(fallback_title):
             final_poster = f_poster
@@ -214,7 +214,7 @@ def transform_content(item: dict, backdrop_size: str = "w1280", lang: str = "tr"
         elif localized_title == original_title_val and not is_tr_content:
             final_backdrop = f_backdrop
 
-    # Rol bilgisi (Kişi portfolyosu için)
+    # Role information (for person portfolio)
     role = item.get("role")
     if not role:
         if item.get("character"):
@@ -244,7 +244,7 @@ def transform_content(item: dict, backdrop_size: str = "w1280", lang: str = "tr"
 
 
 def _extract_trailer_key(videos: list[dict]) -> str | None:
-    """Video listesi içinden en uygun YouTube fragman anahtarını döner."""
+    """Returns the most suitable YouTube trailer key from the video list."""
     if not videos:
         return None
     trailers = [v for v in videos if v.get("site") == "YouTube" and v.get("type") == "Trailer"]
@@ -260,7 +260,7 @@ def _extract_trailer_key(videos: list[dict]) -> str | None:
 
 
 def transform_person(item: dict, lang: str = "tr") -> dict:
-    """TMDB kişi verisini PersonReadBasic şemasına dönüştürür."""
+    """Transforms TMDB person data to PersonReadBasic schema."""
     display_name, original_name = resolve_person_name(item, lang)
     dept = item.get("known_for_department")
     return {
@@ -274,7 +274,7 @@ def transform_person(item: dict, lang: str = "tr") -> dict:
 
 
 def merge_season_data(primary_data: dict, secondary_data: dict | None) -> dict:
-    """Birincil ve ikincil sezon verilerini birleştirir."""
+    """Merges primary and secondary season data."""
     merged = {**primary_data}
     s_data = secondary_data or {}
     
@@ -297,7 +297,7 @@ def merge_season_data(primary_data: dict, secondary_data: dict | None) -> dict:
 
 
 def transform_season(item: dict, lang: str = "tr") -> dict:
-    """Sezon ve bölüm verilerini SeasonDetailRead şemasına dönüştürür."""
+    """Transforms season and episode data to SeasonDetailRead schema."""
     l_code = lang[:2].lower()
     
     def resolve_field(obj, field, fallback_field):

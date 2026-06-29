@@ -32,7 +32,7 @@ class SeriesService:
         self.session = session
 
     async def get_details(self, item_id: int, lang_config: dict) -> ContentDetailRead:
-        """Dizi detaylarını çeker ve birleştirir."""
+        """Fetches and merges series details."""
         try:
             tr_data, en_data = await tmdb_client.get_details("series", item_id, lang_config=lang_config)
             tr_data["media_type"] = "series"
@@ -96,7 +96,7 @@ class SeriesService:
         return base
 
     async def get_season(self, item_id: int, season_number: int, lang_config: dict) -> SeasonDetailRead:
-        """Sezon detaylarını çeker."""
+        """Fetches season details."""
         try:
             tr_data, en_data = await tmdb_client.get_season_details(item_id, season_number, lang_config=lang_config)
         except HTTPException:

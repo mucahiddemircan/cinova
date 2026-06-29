@@ -95,7 +95,7 @@ class UserLogin(BaseModel):
 
 
 class SetPasswordRequest(BaseModel):
-    """Google-only kullanıcılar için ilk şifre belirleme."""
+    """Initial password setting for Google-only users."""
     new_password: str
 
     @field_validator("new_password")
@@ -119,7 +119,7 @@ class SetPasswordRequest(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
-    """Mevcut şifresi olan kullanıcılar için şifre değiştirme."""
+    """Password change for users with an existing password."""
     current_password: str
     new_password: str
 
@@ -144,10 +144,10 @@ class ChangePasswordRequest(BaseModel):
 
 
 class ChangeEmailRequest(BaseModel):
-    """E-posta değiştirme isteği."""
+    """Email change request."""
     new_email: str
     current_password: Optional[str] = None
-    new_password: Optional[str] = None # Google-only kullanıcılar için zorunlu kılınacak
+    new_password: Optional[str] = None # Will be made mandatory for Google-only users
 
     @field_validator("new_email")
     @classmethod
@@ -180,7 +180,7 @@ class ChangeEmailRequest(BaseModel):
 
 
 class ChangeUsernameRequest(BaseModel):
-    """Kullanıcı adı değiştirme isteği."""
+    """Username change request."""
     new_username: str
     current_password: Optional[str] = None
 
@@ -196,12 +196,12 @@ class ChangeUsernameRequest(BaseModel):
         return value
 
 class ChangeAvatarRequest(BaseModel):
-    """Profil fotoğrafı URL güncelleme isteği."""
+    """Profile picture URL update request."""
     avatar_url: str | None
 
 
 class AccountStatusResponse(BaseModel):
-    """Hesap durumu yanıtı."""
+    """Account status response."""
     has_password: bool
     has_google: bool
     auth_provider: str

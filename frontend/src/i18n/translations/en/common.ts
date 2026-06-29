@@ -1,0 +1,87 @@
+const translations = {
+    brand:          "{brand}",
+    loading:        "Loading...",
+    cancel:         "Cancel",
+    save:           "Save",
+    saved:          "Saved",
+    update:         "Update",
+    delete:         "Delete",
+    edit:           "Edit",
+    close:          "Close",
+    confirm:        "Confirm",
+    back:           "Back",
+    showAll:        "Show all",
+    seeAll:         "Read more",
+    noContent:      "No content yet",
+    allLoaded:      "All content loaded.",
+    resultsCount:   "results found",
+    noResults:      "No matching results found.",
+    noResultsHint:  "Try different keywords or change the filter.",
+    send:           "Send",
+    sending:        "Sending...",
+    private:        "Private",
+    public:         "Public",
+    movieList:      "Movie List",
+    seriesList:     "Series List",
+    options:        "Options",
+    addToList:      "Add to My Lists",
+    remove:         "Remove",
+    addedToList:    "Added to {label}.",
+    removedFromList: "Removed from {label}.",
+    movie:          "Movie",
+    series:         "Series",
+    following:      "Following",
+    followers:      "Followers",
+    scrollLeft:     "Scroll left",
+    scrollRight:    "Scroll right",
+    genreNotSpecified: "Genre Not Specified",
+    moreCount:      "{count} more...",
+    results:        "results",
+    backToHome:     "Back to Home",
+    status: {
+        watchlist:      "Watchlist",
+        watched:        "Watched",
+        likes:          "Likes",
+        dislikes:       "Dislikes",
+        chooseStatus:   "Status",
+    },
+    time: {
+        now: "Just now",
+        seconds: "{n} seconds ago",
+        minutes: "{n} minutes ago",
+        hours: "{n} hours ago",
+        days: "{n} days ago",
+        weeks: "{n} weeks ago",
+        months: "{n} months ago",
+        years: "{n} years ago"
+    },
+    errors: {
+        generic: "An error occurred",
+        notFound: {
+            title: "Page Not Found",
+            subtitle: "The page you're looking for doesn't exist or may have been moved.",
+            homeBtn: "Back to Home",
+            user: "User not found.",
+            content: "Content not found.",
+            list: "List not found."
+        },
+        forbidden: {
+            title: "Access Denied",
+            subtitle: "You don't have permission to view this page.",
+            homeBtn: "Back to Home"
+        },
+        serverError: {
+            title: "Server Error",
+            subtitle: "We're unable to complete your request at the moment. Please try again later.",
+            homeBtn: "Refresh"
+        },
+        authRequired: "You must log in to access this page.",
+        avatar: {
+            size: "File size must be less than 5MB.",
+            auth: "Failed to retrieve session info.",
+            general: "An error occurred while uploading the photo."
+        }
+    },
+};
+
+export default translations;

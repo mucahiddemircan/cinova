@@ -25,11 +25,11 @@ from app.utils.content_converters import (
 router = APIRouter(prefix="/people", tags=["people"])
 
 async def _ensure_bilingual_names(people: list[dict]) -> list[dict]:
-    """Listede ismi Latin alfabesi olmayan kişilerin İngilizce isimlerini çeker."""
+    """Fetches English names for people in the list whose names are non-Latin."""
     tasks = []
     indices = []
     for i, p in enumerate(people):
-        # is_latin kontrolü kaldırıldı, hiyerarşik çözümleme transform aşamasında yapılacak
+        # is_latin check is removed, hierarchical resolution will be done during transform phase
         p["display_name"] = p.get("name") or p.get("_fallback_name")
         if not p.get("_fallback_name"):
             tasks.append(tmdb_client.get_person_brief(p["id"]))
@@ -40,7 +40,7 @@ async def _ensure_bilingual_names(people: list[dict]) -> list[dict]:
         
     extra_data = await asyncio.gather(*tasks)
     for i, data in zip(indices, extra_data):
-        # Merge extra data (özellikle _fallback_name)
+        # Merge extra data (especially _fallback_name)
         people[i].update(data)
     
     return people
@@ -50,7 +50,7 @@ async def list_popular_people(
     page: int = 1,
     lang_config: dict = Depends(get_lang_config)
 ):
-    """Popüler kişileri listeler."""
+    """Lists popular people."""
     data = await tmdb_client.get_popular_people(page=page, lang_config=lang_config)
     results = await _ensure_bilingual_names(data["results"])
     lang = lang_config["lang"]
@@ -68,7 +68,7 @@ async def get_person_details(
     current_user: User | None = Depends(get_optional_current_user),
     lang_config: dict = Depends(get_lang_config)
 ):
-    """Genel kişi detay sayfası (aktif oyuncu veya yönetmen farketmeksizin)."""
+    """General person detail page (regardless of whether they are active actor or director)."""
     tr_data, en_data = await tmdb_client.get_person_details(person_id, lang_config=lang_config)
 
     merged = merge_person_data(tr_data, en_data)
@@ -103,7 +103,7 @@ async def get_person_details(
 
     all_credits = credits_raw.get("cast", []) + credits_raw.get("crew", [])
     
-    # Tüm kredileri birleştir ve rol bilgilerini konsolide et
+    # Combine all credits and consolidate role info
     known_for_map = {}
     for item in all_credits:
         content = transform_content(item, lang=lang)
@@ -127,9 +127,9 @@ async def get_person_details(
 
     base["known_for"] = list(known_for_map.values())
 
-    # Akıllı Sıralama (Smart Ranking) - Bilinen İşi kısmını düzenle
+    # Smart Ranking - Adjust Known For Department
     def calculate_score(item, dept):
-        # Temel puan: popülerlik ve oy sayısının harmanı
+        # Base score: blend of popularity and vote count
         popularity = item.get("popularity") or 0
         vote_count = item.get("vote_count") or 0
         score = popularity + (vote_count / 100.0)
@@ -138,14 +138,14 @@ async def get_person_details(
         job = item.get("job")
         genres = item.get("genre_ids") or []
         
-        # Talk Show, Reality, News türleri
+        # Talk Show, Reality, News genres
         is_talk_reality = any(g in [10767, 10764, 10763] for g in genres)
-        # Kendisi olarak katıldığı roller
+        # Roles played as self
         is_self = any(x in char for x in ["self", "himself", "herself", "guest", "interviewee", "nominee", "winner"])
         
-        # Ceza Mantığı
+        # Penalty Logic
         if is_self and "host" not in char:
-            # Eğer ana işi oyunculuk değilse veya içerik talk show ise ağır ceza
+            # If main job is not acting or content is a talk show, heavy penalty
             if dept != "Acting" or is_talk_reality:
                 score *= 0.001
             else:
@@ -154,7 +154,7 @@ async def get_person_details(
         if is_talk_reality and dept not in ["Acting", "Production"] and "host" not in char:
             score *= 0.01
             
-        # Uzmanlık Bonusu
+        # Expertise Bonus
         if job == dept:
             score *= 2.5
         elif dept == "Acting" and item.get("media_type") == "movie" and not is_self:
@@ -162,7 +162,7 @@ async def get_person_details(
             
         return score
 
-    # Ham krediler üzerinden puanlama yapalım (duplicate engellemek için map kullanıyoruz)
+    # Score based on raw credits (use map to avoid duplicates)
     top_scores = []
     seen_ids = set()
     
@@ -178,7 +178,7 @@ async def get_person_details(
         top_scores.append((score, item))
         seen_ids.add((cid, mtype))
         
-    # Puanlara göre sırala ve listeyi hazırla
+    # Sort by score and prepare the list
     top_scores.sort(key=lambda x: x[0], reverse=True)
     base["known_for"] = [transform_content(item, lang=lang) for _, item in top_scores]
 

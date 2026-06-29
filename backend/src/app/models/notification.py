@@ -1,6 +1,6 @@
-"""Bildirim modeli.
+"""Notification model.
 
-Kullanıcı bildirimlerini (takip, yorum yanıtı, yorum beğenisi) saklar.
+Stores user notifications (follow, comment reply, comment like).
 """
 
 from datetime import datetime
@@ -12,8 +12,8 @@ from app.core.datetime_utils import utc_now
 
 class Notification(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)       # Bildirimi alan kullanıcı
-    actor_id: int = Field(foreign_key="user.id")                   # Aksiyonu yapan kullanıcı
+    user_id: int = Field(foreign_key="user.id", index=True)       # User who receives the notification
+    actor_id: int = Field(foreign_key="user.id")                   # User who performed the action
     type: str = Field(index=True)                                   # "follow" | "comment_reply" | "comment_like"
     comment_id: int | None = Field(default=None, foreign_key="comment.id")
     tmdb_id: int | None = Field(default=None)

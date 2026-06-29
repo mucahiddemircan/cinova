@@ -30,7 +30,7 @@ async def get_series_service(session: AsyncSession = Depends(get_session)) -> Se
     return SeriesService(session)
 
 def get_lang_config(request: Request) -> dict:
-    """Accept-Language header'ından TMDB dil konfigürasyonunu döndürür."""
+    """Returns the TMDB language configuration from the Accept-Language header."""
     return tmdb_client.get_language_config(request.headers.get("Accept-Language"))
 
 security = HTTPBearer()
@@ -65,18 +65,18 @@ async def get_current_user(
     except ValueError:
         raise HTTPException(status_code=401, detail="Geçersiz Supabase ID formatı")
 
-    # Email'i küçük harfe çevirerek çakışmaları önleyelim
+    # Convert email to lowercase to prevent conflicts
     email_raw = payload.get("email")
     email = email_raw.lower() if email_raw else None
     
-    # --- Email Doğrulama Durumu Tespiti (Genişletilmiş) ---
+    # --- Email Verification Status Detection (Extended) ---
     email_confirmed_at = payload.get("email_confirmed_at")
     app_metadata = payload.get("app_metadata", {})
     
-    # 1. Root seviyesindeki email_verified
-    # 2. app_metadata içindeki email_verified
-    # 3. user_metadata içindeki email_verified
-    # 4. email_confirmed_at alanının varlığı
+    # 1. Root level email_verified
+    # 2. email_verified in app_metadata
+    # 3. email_verified in user_metadata
+    # 4. Presence of email_confirmed_at field
     user_metadata = payload.get("user_metadata", {})
     jwt_email_verified = (
         bool(payload.get("email_verified")) or 
@@ -85,33 +85,33 @@ async def get_current_user(
         (email_confirmed_at is not None)
     )
     
-    # Google OAuth ile gelen kullanıcıları tespit et
+    # Detect users coming via Google OAuth
     provider = app_metadata.get("provider", "email")
     is_google_login = provider == "google"
     
-    # Google girişlerinde email otomatik olarak doğrulanmış kabul edilir
+    # For Google sign-ins, email is automatically considered verified
     if is_google_login:
         jwt_email_verified = True
 
-    # Kayıt sırasında gönderilen metadata bilgilerini al
+    # Get the metadata information sent during registration
     username_from_meta = user_metadata.get("username")
     birth_date_from_meta = user_metadata.get("birth_date")
 
-    # --- Adım 1: supabase_id ile kullanıcı ara ---
+    # --- Step 1: Find user by supabase_id ---
     query = await session.exec(select(User).where(User.supabase_id == supabase_id))
     user = query.one_or_none()
 
     if user:
         needs_update = False
         
-        # --- E-posta ve Provider Senkronizasyonu ---
-        # JWT'den gelen güncel e-posta
+        # --- Email and Provider Synchronization ---
+        # Latest email coming from JWT
         jwt_email = payload.get("email")
         if jwt_email and user.email != jwt_email.lower():
             logger.info("E-posta değişikliği algılandı: %s -> %s", user.email, jwt_email.lower())
             user.email = jwt_email.lower()
             
-            # Yönerge 3: Google/Hybrid kullanıcısı e-posta değiştirirse Google bağlantısı kopar
+            # Directive 3: If Google/Hybrid user changes email, the Google connection is unlinked
             needs_update = True
 
         # email_verified durumunu senkronize et
@@ -119,24 +119,24 @@ async def get_current_user(
             user.email_verified = jwt_email_verified
             needs_update = True
             
-        # auth_provider senkronize et (Email -> Hybrid dönüşümü için)
-        # Sadece e-posta değişmemişse bu mantık çalışır
+        # Synchronize auth_provider (for Email -> Hybrid conversion)
+        # This logic only runs if the email has not changed
         providers = app_metadata.get("providers", [])
         if "google" in providers and user.auth_provider == "email":
             user.auth_provider = "hybrid"
             needs_update = True
         elif is_google_login and user.auth_provider == "google":
-            # Zaten google, ama emin olalım
+            # Already Google, but let's make sure
             pass
             
-        # Eğer profil eksikse ve token'da yeni veri varsa tamamla
+        # Complete profile if missing and new data is present in the token
         if not user.is_complete:
             if username_from_meta:
                 user.username = username_from_meta
             if birth_date_from_meta:
                 user.birth_date = birth_date_from_meta
             
-            # Sadece her iki bilgi de tamsa is_complete=True yap
+            # Set is_complete=True only if both username and birth_date are present
             if user.username and user.birth_date:
                 user.is_complete = True
             needs_update = True
@@ -148,17 +148,17 @@ async def get_current_user(
             
         return user
 
-    # --- Adım 2: email ile kullanıcı ara ---
+    # --- Step 2: Find user by email ---
     if email:
         email_query = await session.exec(select(User).where(func.lower(User.email) == email.lower()))
         existing_user = email_query.one_or_none()
 
         if existing_user:
-            # Token doğrulanmış diyor mu veya zaten veritabanında doğrulanmış mı?
+            # Does token say verified or is it already verified in the database?
             if existing_user.email_verified or is_google_login or jwt_email_verified:
-                # --- Adım 2a: Email doğrulanmış → Güvenli hesap birleştirme ---
+                # --- Step 2a: Email verified → Secure account merging ---
                 existing_user.supabase_id = supabase_id
-                existing_user.email_verified = True # Token veya DB doğrulanmış dediği için TRUE yapıyoruz
+                existing_user.email_verified = True # Setting to TRUE since either token or DB confirms verification
                 
                 if is_google_login:
                     if existing_user.hashed_password:
@@ -172,7 +172,7 @@ async def get_current_user(
                 if birth_date_from_meta:
                     existing_user.birth_date = birth_date_from_meta
                 
-                # Tamamlanma kontrolü
+                # Completion check
                 if existing_user.username and existing_user.birth_date:
                     existing_user.is_complete = True
                 else:
@@ -184,7 +184,7 @@ async def get_current_user(
                 logger.info("Hesap birleştirildi (Email üzerinden): user_id=%s, provider=%s", existing_user.id, existing_user.auth_provider)
                 return existing_user
             else:
-                # --- Adım 2b: Email doğrulanmamış → Hesabı ez, yeniden oluştur ---
+                # --- Step 2b: Email not verified → Overwrite and recreate account ---
                 logger.warning(
                     "Doğrulanmamış hesap eziliyor: email=%s, eski_user_id=%s",
                     email, existing_user.id
@@ -192,12 +192,12 @@ async def get_current_user(
                 await session.delete(existing_user)
                 await session.commit()
 
-    # --- Adım 3: Yeni kullanıcı oluştur (JIT Provisioning) ---
+    # --- Step 3: Create new user (JIT Provisioning) ---
     if email:
         import random
         import string
 
-        # Profil tamamlanma durumu kontrolü
+        # Profile completion status check
         is_complete = False
         if username_from_meta and birth_date_from_meta:
             username = username_from_meta
@@ -239,7 +239,7 @@ async def get_optional_current_user(
     auth: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
     session: AsyncSession = Depends(get_session),
 ) -> User | None:
-    """Token varsa kullanıcıyı döner, yoksa None döner."""
+    """Returns the user if token exists, otherwise returns None."""
     if not auth:
         return None
 
@@ -269,7 +269,7 @@ async def get_current_user_sse(
     auth: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
     session: AsyncSession = Depends(get_session),
 ) -> User:
-    """SSE için hem Header hem de Query Parameter üzerinden token kabul eden dependency."""
+    """Dependency that accepts token via both Header and Query Parameter for SSE."""
     actual_token = token or (auth.credentials if auth else None)
     
     if not actual_token:

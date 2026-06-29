@@ -77,7 +77,7 @@ async def discover_series(
     vote_count_gte: int | None = None,
     lang_config: dict = Depends(get_lang_config),
 ):
-    """Gelişmiş filtreleme ile dizi keşfeder."""
+    """Discovers series with advanced filtering."""
     params = {"page": page, "sort_by": sort_by}
     if with_genres: params["with_genres"] = with_genres
     if first_air_date_year: params["first_air_date_year"] = first_air_date_year
@@ -108,7 +108,7 @@ async def get_personalized_series_recommendations(
     session: AsyncSession = Depends(get_session),
     lang_config: dict = Depends(get_lang_config)
 ):
-    """Kullanıcıya özel dizi önerilerinin tamamını döner."""
+    """Returns all personalized series recommendations."""
     return await get_type_recommendations(user, "series", session, lang_config)
 
 @router.get("/{item_id}", response_model=ContentDetailRead)
@@ -117,7 +117,7 @@ async def get_series(
     lang_config: dict = Depends(get_lang_config),
     service: SeriesService = Depends(get_series_service)
 ):
-    """Dizi detaylarını çeker."""
+    """Fetches series details."""
     return await service.get_details(item_id, lang_config)
 
 @router.get("/{item_id}/cast", response_model=CastRead)
@@ -126,7 +126,7 @@ async def get_cast(
     lang_config: dict = Depends(get_lang_config),
     service: SeriesService = Depends(get_series_service)
 ):
-    """Dizi oyuncu ve ekip listesini döner."""
+    """Returns series cast and crew list."""
     details = await service.get_details(item_id, lang_config)
     return {"cast": details.get("cast", []), "crew": details.get("crew", [])}
 
@@ -145,5 +145,5 @@ async def get_season(
     lang_config: dict = Depends(get_lang_config),
     service: SeriesService = Depends(get_series_service)
 ):
-    """Sezon detaylarını çeker."""
+    """Fetches season details."""
     return await service.get_season(item_id, season_number, lang_config)

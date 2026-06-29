@@ -24,7 +24,7 @@ async def notification_stream(
     request: Request,
     current_user: User = Depends(get_current_user_sse)
 ):
-    """SSE Stream üzerinden anlık bildirimleri iletir."""
+    """Delivers real-time notifications via SSE stream."""
     async def event_generator():
         queue = notification_manager.connect(current_user.id)
         try:
@@ -33,10 +33,10 @@ async def notification_stream(
                     break
                 
                 try:
-                    # 30 saniye timeout ile bekle (ping/heartbeat için)
+                    # Wait with a 30-second timeout (for ping/heartbeat)
                     data = await asyncio.wait_for(queue.get(), timeout=30.0)
                     
-                    # Eğer data string ise (manager json.dumps yapmış olabilir)
+                    # If data is a string (manager might have done json.dumps)
                     if isinstance(data, str):
                         import json
                         data_dict = json.loads(data)
@@ -62,7 +62,7 @@ async def list_notifications(
     current_user: User = Depends(get_current_user),
     service: NotificationService = Depends(get_notification_service)
 ):
-    """Kullanıcının bildirim geçmişini listeler."""
+    """Lists the user's notification history."""
     return await service.get_user_notifications(current_user.id, limit=limit, offset=offset)
 
 @router.get("/unread-count")
@@ -70,7 +70,7 @@ async def get_unread_count(
     current_user: User = Depends(get_current_user),
     service: NotificationService = Depends(get_notification_service)
 ):
-    """Okunmamış bildirim sayısını döner."""
+    """Returns unread notification count."""
     count = await service.get_unread_count(current_user.id)
     return {"count": count}
 
@@ -79,7 +79,7 @@ async def mark_all_read(
     current_user: User = Depends(get_current_user),
     service: NotificationService = Depends(get_notification_service)
 ):
-    """Tüm bildirimleri okundu olarak işaretler."""
+    """Marks all notifications as read."""
     count = await service.mark_all_as_read(current_user.id)
     return {"status": "success", "updated": count}
 
@@ -89,7 +89,7 @@ async def mark_notification_read(
     current_user: User = Depends(get_current_user),
     service: NotificationService = Depends(get_notification_service)
 ):
-    """Belirli bir bildirimi okundu olarak işaretler."""
+    """Marks a specific notification as read."""
     success = await service.mark_as_read(notification_id, current_user.id)
     if not success:
         raise HTTPException(status_code=404, detail="Bildirim bulunamadı")
@@ -101,7 +101,7 @@ async def delete_notification(
     current_user: User = Depends(get_current_user),
     service: NotificationService = Depends(get_notification_service)
 ):
-    """Bir bildirimi siler."""
+    """Deletes a notification."""
     success = await service.delete_notification(notification_id, current_user.id)
     if not success:
         raise HTTPException(status_code=404, detail="Bildirim bulunamadı")

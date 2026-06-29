@@ -3,10 +3,10 @@ import unicodedata
 
 def generate_slug(text: str) -> str:
     """
-    Metni URL dostu bir slug haline getirir.
-    Türkçe karakter desteği sağlar.
+    Converts text into a URL-friendly slug.
+    Provides Turkish character support.
     """
-    # Türkçe karakter dönüşümü
+    # Turkish character conversion
     tr_map = {
         'ş': 's', 'Ş': 's',
         'ı': 'i', 'İ': 'i',
@@ -18,16 +18,15 @@ def generate_slug(text: str) -> str:
     for tr_char, en_char in tr_map.items():
         text = text.replace(tr_char, en_char)
     
-    # Küçük harfe çevir
     text = text.lower()
     
-    # Unicode normalizasyonu (diğer özel karakterler için)
+    # Unicode normalization (for other special characters)
     text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8')
     
-    # Alfanümerik olmayanları tire ile değiştir
+    # Replace non-alphanumeric characters with hyphens
     text = re.sub(r'[^a-z0-9]+', '-', text)
     
-    # Baş ve sondaki tireleri temizle
     text = text.strip('-')
     
     return text
+

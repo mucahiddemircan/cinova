@@ -1,4 +1,4 @@
-"""Kullanıcı profili endpointleri.
+"""User profile endpoints.
 
 Herkese açık profil sayfası, takip istatistikleri ve
 içerik listelerini görüntüleme işlemlerini yönetir.
@@ -23,7 +23,7 @@ async def get_user_profile(
     session: AsyncSession = Depends(get_session),
     current_user: User | None = Depends(get_optional_current_user)
 ):
-    """Kullanıcının herkese açık profil ve izleme listelerini döndürür."""
+    """Returns public profile and watchlists of the user."""
     query = await session.exec(select(User).where(User.username == username))
     user = query.one_or_none()
     if not user:
@@ -34,7 +34,7 @@ async def get_user_profile(
     )
     watchlist_items = watchlist_query.all()
 
-    # Takip istatistikleri
+    # Follow statistics
     followers_count = (await session.exec(
         select(func.count()).where(Follow.followed_user_id == user.id)
     )).first() or 0
@@ -42,7 +42,7 @@ async def get_user_profile(
         select(func.count()).where(Follow.follower_id == user.id)
     )).first() or 0
 
-    # Takip durumu
+    # Follow status
     is_following = False
     if current_user:
         is_following_query = await session.exec(

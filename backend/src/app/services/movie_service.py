@@ -32,7 +32,7 @@ class MovieService:
         self.session = session
 
     async def get_home_data(self, lang_config: dict) -> HomeData:
-        """Ana sayfa verilerini paralel çeker."""
+        """Fetches homepage data in parallel."""
         from app.api.endpoints.people import list_popular_people
         
         all_content, popular_people_data = await asyncio.gather(
@@ -51,7 +51,7 @@ class MovieService:
         }
 
     async def search_all(self, query_str: str, search_type: str, lang_config: dict) -> SearchGroupedRead | List[Any]:
-        """TMDB ve yerel DB üzerinde hibrit arama yapar."""
+        """Performs hybrid search on TMDB and local DB."""
         if not query_str:
             return SearchGroupedRead() if search_type == "all" else []
 
@@ -100,7 +100,7 @@ class MovieService:
         return grouped
 
     async def get_details(self, item_id: int, lang_config: dict) -> ContentDetailRead:
-        """Film detaylarını çeker ve birleştirir."""
+        """Fetches and merges movie details."""
         try:
             tr_data, en_data = await tmdb_client.get_details("movie", item_id, lang_config=lang_config)
             tr_data["media_type"] = "movie"

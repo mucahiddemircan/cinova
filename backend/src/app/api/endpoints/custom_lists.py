@@ -25,12 +25,12 @@ async def create_custom_list(
     current_user: User = Depends(get_current_user),
     list_in: CustomListCreate
 ):
-    """Yeni bir özel liste oluşturur."""
+    """Creates a new custom list."""
     base_slug = generate_slug(list_in.title)
     slug = base_slug
     counter = 1
     
-    # Benzersiz slug kontrolü (aynı kullanıcı için)
+    # Unique slug check (for the same user)
     while True:
         query = select(CustomList).where(
             CustomList.user_id == current_user.id,
@@ -51,9 +51,9 @@ async def create_custom_list(
         media_type=list_in.media_type
     )
     session.add(db_list)
-    await session.flush() # ID almak için
+    await session.flush() # To get ID
     
-    # Öğeleri ekle
+    # Add items
     for item_in in list_in.items:
         db_item = CustomListItem(
             list_id=db_list.id,
@@ -74,7 +74,7 @@ async def list_custom_lists(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Kullanıcının özel listelerini getirir."""
+    """Gets the user's custom lists."""
     query = select(CustomList).where(CustomList.user_id == current_user.id).options(selectinload(CustomList.items))
     result = await session.exec(query)
     return result.all()
@@ -86,7 +86,7 @@ async def get_user_custom_lists(
     current_user: User | None = Depends(get_optional_current_user),
     lang_config: dict = Depends(get_lang_config)
 ):
-    """Belirli bir kullanıcının özel listelerini (özet formatında) getirir."""
+    """Gets custom lists of a specific user (in summary format)."""
     user_query = await session.exec(select(User).where(User.username == username))
     user = user_query.one_or_none()
     if not user:
@@ -104,7 +104,7 @@ async def get_user_custom_lists(
     
     data = []
     for l in custom_lists:
-        # Son 5 öğenin tmdb_id'lerini al
+        # Get tmdb_ids of the last 5 items
         items_query = await session.exec(
             select(CustomListItem.tmdb_id)
             .where(CustomListItem.list_id == l.id)
@@ -113,12 +113,12 @@ async def get_user_custom_lists(
         )
         item_ids = items_query.all()
         
-        # Hidrasyon için TMDB'den detayları çek (sadece posterler için)
+        # Fetch details from TMDB for hydration (only for posters)
         preview_ids = [(l.media_type, tid) for tid in item_ids]
         details = await tmdb_client.get_batch_details(preview_ids, lang_config=lang_config)
         posters = [build_image_url(d.get("poster_path")) for d in details if d.get("poster_path")]
         
-        # Öğe sayısı
+        # Item count
         count_query = await session.exec(
             select(func.count(CustomListItem.id)).where(CustomListItem.list_id == l.id)
         )
@@ -147,7 +147,7 @@ async def get_custom_list_by_slug(
     current_user: User | None = Depends(get_optional_current_user),
     lang_config: dict = Depends(get_lang_config)
 ):
-    """Kullanıcı adı ve slug üzerinden liste detaylarını getirir."""
+    """Gets list details via username and slug."""
     query = select(User).where(User.username == username)
     result = await session.exec(query)
     user = result.first()
@@ -164,7 +164,7 @@ async def get_custom_list_by_slug(
     if not db_list:
         raise HTTPException(status_code=404, detail="Liste bulunamadı")
     
-    # Gizlilik kontrolü
+    # Privacy check
     if db_list.is_private:
         if not current_user or current_user.id != db_list.user_id:
             raise HTTPException(status_code=404, detail="Liste bulunamadı")
@@ -192,7 +192,7 @@ async def get_custom_list_by_id(
     list_id: int,
     lang_config: dict = Depends(get_lang_config)
 ):
-    """ID üzerinden liste detaylarını getirir (Internal kullanım için)."""
+    """Gets list details by ID (for internal use)."""
     query = select(CustomList).where(CustomList.id == list_id).options(selectinload(CustomList.items))
     result = await session.exec(query)
     db_list = result.first()
@@ -242,7 +242,7 @@ async def add_items_to_list(
     items_in: List[CustomListItemCreate],
     lang_config: dict = Depends(get_lang_config)
 ):
-    """Listeye yeni öğeler ekler."""
+    """Adds new items to the list."""
     db_list = await session.get(CustomList, list_id)
     if not db_list:
         raise HTTPException(status_code=404, detail="Liste bulunamadı")
@@ -287,7 +287,7 @@ async def remove_item_from_list(
     list_id: int,
     tmdb_id: int
 ):
-    """Listeden belirli bir öğeyi çıkarır."""
+    """Removes a specific item from the list."""
     db_list = await session.get(CustomList, list_id)
     if not db_list:
         raise HTTPException(status_code=404, detail="Liste bulunamadı")

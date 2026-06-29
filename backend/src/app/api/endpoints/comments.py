@@ -26,7 +26,7 @@ async def get_replies(
     session: AsyncSession = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_current_user),
 ):
-    """Belirli bir yorumun yanıtlarını getirir."""
+    """Gets replies for a specific comment."""
     likes_sub = (
         select(CommentInteraction.comment_id, func.count(CommentInteraction.id).label("count"))
         .where(CommentInteraction.interaction_type == "like")
@@ -109,7 +109,7 @@ async def get_comments(
     session: AsyncSession = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_current_user),
 ):
-    """İçeriğe ait üst seviye yorumları getirir."""
+    """Gets top-level comments for the content."""
     replies_count_sub = (
         select(Comment.parent_id, func.count(Comment.id).label("count"))
         .where(Comment.parent_id != None)
@@ -196,7 +196,7 @@ async def create_comment(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Yeni yorum veya yanıt oluşturur."""
+    """Creates a new comment or reply."""
     db_comment = Comment(
         user_id=current_user.id,
         tmdb_id=comment_input.tmdb_id,
@@ -209,7 +209,7 @@ async def create_comment(
     await session.commit()
     await session.refresh(db_comment)
 
-    # Yanıt ise üst yorumun sahibine bildirim gönder
+    # If it's a reply, send notification to the parent comment's owner
     if comment_input.parent_id:
         parent_comment = await session.get(Comment, comment_input.parent_id)
         if parent_comment and parent_comment.user_id != current_user.id:
@@ -248,7 +248,7 @@ async def interact_with_comment(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Yoruma beğeni/beğenmeme ekler veya mevcut etkileşimi kaldırır."""
+    """Adds a like/dislike to a comment or removes the existing interaction."""
     stmt = select(CommentInteraction).where(
         and_(
             CommentInteraction.comment_id == comment_id,
@@ -277,7 +277,7 @@ async def interact_with_comment(
     from app.models import Notification
     from sqlmodel import delete
 
-    # Eğer etkileşim kaldırıldıysa veya dislike'a döndüyse, eski beğeni bildirimini sil
+    # If interaction was removed or changed to dislike, delete the old like notification
     if interaction_type == "clear" or interaction_type == "dislike" or (existing_interaction and existing_interaction.interaction_type == interaction_type):
         delete_notification_stmt = delete(Notification).where(
             and_(
@@ -289,7 +289,7 @@ async def interact_with_comment(
         await session.exec(delete_notification_stmt)
         await session.commit()
 
-    # Beğeni bildirimi gönder (sadece "like" ve başka bir kullanıcının yorumu ise)
+    # Send like notification (only if it's a "like" and on another user's comment)
     if interaction_type == "like":
         comment = await session.get(Comment, comment_id)
         if comment and comment.user_id != current_user.id:
@@ -312,7 +312,7 @@ async def delete_comment(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Yorumu siler (sadece sahibine açık)."""
+    """Deletes the comment (only open to the owner)."""
     db_comment = await session.get(Comment, comment_id)
     if not db_comment:
         raise HTTPException(status_code=404, detail="Yorum bulunamadı")
@@ -324,8 +324,8 @@ async def delete_comment(
     
     from sqlalchemy import text
     
-    # Tüm alt yorumların (recursive) ID'lerini bulmak için CTE kullanıyoruz
-    # Bu, PostgreSQL/Supabase üzerinde derin iç içe geçmiş yorumların tamamını kapsar.
+    # We use CTE to find all sub-comment IDs recursively
+    # This covers all deeply nested comments on PostgreSQL/Supabase.
     tree_query = text("""
         WITH RECURSIVE comment_tree AS (
             SELECT id FROM comment WHERE id = :cid
@@ -338,12 +338,12 @@ async def delete_comment(
     tree_res = await session.execute(tree_query, {"cid": comment_id})
     all_comment_ids = [row[0] for row in tree_res.all()]
     
-    # Bildirimleri sil
+    # Delete notifications
     await session.exec(
         delete(Notification).where(Notification.comment_id.in_(all_comment_ids))
     )
     
-    # Etkileşimleri (beğeni/beğenmeme) sil
+    # Delete interactions (likes/dislikes)
     await session.exec(
         delete(CommentInteraction).where(CommentInteraction.comment_id.in_(all_comment_ids))
     )
@@ -359,7 +359,7 @@ async def update_comment(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Yorumu düzenler (sadece sahibine açık)."""
+    """Edits the comment (only open to the owner)."""
     db_comment = await session.get(Comment, comment_id)
     if not db_comment:
         raise HTTPException(status_code=404, detail="Yorum bulunamadı")

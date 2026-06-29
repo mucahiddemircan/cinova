@@ -1,10 +1,10 @@
-"""Merkezi API yönlendirici.
+"""Central API router.
 
-Tüm endpoint modüllerini tek bir router altında toplar.
+Aggregates all endpoint modules under a single router.
 """
 
 from fastapi import APIRouter
-from .endpoints import auth, movies, series, users, people, follows, comments, recommendations, certifications, library, notifications, account, custom_lists, metadata
+from .endpoints import auth, movies, series, users, people, follows, comments, recommendations, certifications, library, notifications, account, custom_lists, metadata, support
 
 api_router = APIRouter()
 
@@ -22,3 +22,4 @@ api_router.include_router(notifications.router)
 api_router.include_router(account.router)
 api_router.include_router(custom_lists.router)
 api_router.include_router(metadata.router, prefix="/metadata", tags=["metadata"])
+api_router.include_router(support.router)

@@ -25,7 +25,7 @@ async def get_home_data(
     lang_config: dict = Depends(get_lang_config),
     service: MovieService = Depends(get_movie_service)
 ):
-    """Ana sayfa için tüm verileri paralel olarak çeker."""
+    """Fetches all homepage data in parallel."""
     return await service.get_home_data(lang_config)
 
 @router.get("/search", response_model=SearchGroupedRead | List[ContentReadBasic])
@@ -35,7 +35,7 @@ async def search_movies(
     lang_config: dict = Depends(get_lang_config),
     service: MovieService = Depends(get_movie_service)
 ):
-    """TMDB ve yerel DB üzerinde gelişmiş arama yapar."""
+    """Performs advanced search on TMDB and local DB."""
     return await service.search_all(q, type, lang_config)
 
 @router.get("/popular", response_model=PaginatedContentRead)
@@ -119,7 +119,7 @@ async def discover_movies(
     vote_count_gte: int | None = None,
     lang_config: dict = Depends(get_lang_config),
 ):
-    """Gelişmiş filtreleme ile film keşfeder."""
+    """Discovers movies with advanced filtering."""
     params = {"page": page, "sort_by": sort_by}
     if with_genres: params["with_genres"] = with_genres
     if primary_release_year: params["primary_release_year"] = primary_release_year
@@ -152,7 +152,7 @@ async def get_personalized_movie_recommendations(
     session: AsyncSession = Depends(get_session),
     lang_config: dict = Depends(get_lang_config)
 ):
-    """Kullanıcıya özel film önerilerinin tamamını döner."""
+    """Returns all personalized movie recommendations."""
     return await get_type_recommendations(user, "movie", session, lang_config)
 
 @router.get("/{item_id}", response_model=ContentDetailRead)
@@ -161,7 +161,7 @@ async def get_movie(
     lang_config: dict = Depends(get_lang_config),
     service: MovieService = Depends(get_movie_service)
 ):
-    """Film detaylarını çeker."""
+    """Fetches movie details."""
     return await service.get_details(item_id, lang_config)
 
 @router.get("/{item_id}/cast", response_model=CastRead)
@@ -170,7 +170,7 @@ async def get_cast(
     lang_config: dict = Depends(get_lang_config),
     service: MovieService = Depends(get_movie_service)
 ):
-    """Film oyuncu ve ekip listesini döner."""
+    """Returns movie cast and crew list."""
     # Note: Using MovieService.get_details then extracting cast/crew or implementing a specific method.
     # For now, let's just use get_details and return relevant parts, or implement get_cast in service.
     # To keep it efficient, we might want a separate method in service.

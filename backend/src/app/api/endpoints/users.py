@@ -1,4 +1,4 @@
-"""Kullanıcı profilleri ve izleme listesi endpointleri.
+"""User profiles and watchlist endpoints.
 
 Sistemdeki kullanıcıları listeleme, başkalarının veya giriş yapan kullanıcının
 profiline ve izleme listelerine erişme işlemlerini yönetir.
@@ -17,15 +17,15 @@ from app.api.endpoints.recommendations import invalidate_user_cache
 
 router = APIRouter(tags=["users"])
 
-# --- Giriş Yapan Kullanıcı (Me) ---
+# --- Logged-in User (Me) ---
 
 @router.get("/me")
 async def get_me(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Oturum açmış kullanıcının bilgilerini, takip istatistiklerini ve liste özetini döndürür."""
-    # Takip istatistikleri
+    """Returns details, follow statistics, and list summary of the logged-in user."""
+    # Follow statistics
     followers_count = (await session.exec(
         select(func.count()).where(Follow.followed_user_id == current_user.id)
     )).first() or 0
@@ -54,8 +54,8 @@ async def complete_profile(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Eksik profil bilgilerini (kullanıcı adı ve doğum tarihi) tamamlar."""
-    # Kullanıcı adı zaten alınmış mı kontrol et (kendisi değilse)
+    """Completes missing profile information (username and birth date)."""
+    # Check if username is already taken (if not themselves)
     if payload.username != current_user.username:
         username_query = await session.exec(select(User).where(User.username == payload.username))
         if username_query.first():
@@ -72,7 +72,7 @@ async def complete_profile(
     return current_user
 
 
-# --- Başka Kullanıcıların Profili ve Listeleri ---
+# --- Other Users' Profiles and Lists ---
 
 @router.get("/profiles/{username}")
 async def get_user_profile(
@@ -80,7 +80,7 @@ async def get_user_profile(
     session: AsyncSession = Depends(get_session),
     current_user: User | None = Depends(get_optional_current_user)
 ):
-    """Kullanıcının herkese açık profilini döndürür."""
+    """Returns public profile of the user."""
     query = await session.exec(select(User).where(User.username == username))
     user = query.one_or_none()
     if not user:

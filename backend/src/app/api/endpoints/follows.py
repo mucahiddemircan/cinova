@@ -25,7 +25,7 @@ async def get_followed_users(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Giriş yapmış kullanıcının takip ettiği diğer kullanıcıları döner."""
+    """Returns other users followed by the logged-in user."""
     query = await session.exec(
         select(User).join(Follow, Follow.followed_user_id == User.id)
         .where(Follow.follower_id == current_user.id)
@@ -39,8 +39,8 @@ async def get_followed_people(
     session: AsyncSession = Depends(get_session),
     lang_config: dict = Depends(get_lang_config)
 ):
-    """Giriş yapmış kullanıcının takip ettiği TMDb kişilerini (oyuncu, yönetmen vb.) döner."""
-    # Takip edilen kişiler
+    """Returns TMDb people (actors, directors, etc.) followed by the logged-in user."""
+    # Followed people
     followed_people_query = (await session.exec(
         select(Follow).where(
             Follow.follower_id == current_user.id,
@@ -69,7 +69,7 @@ async def follow_user(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Bir kullanıcıyı takip eder."""
+    """Follows a user."""
     if current_user.username == username:
         raise HTTPException(status_code=400, detail="Kendinizi takip edemezsiniz")
     
@@ -78,7 +78,7 @@ async def follow_user(
     if not target_user:
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
     
-    # Zaten takip ediliyor mu kontrolü
+    # Check if already followed
     follow_query = await session.exec(
         select(Follow).where(
             Follow.follower_id == current_user.id,
@@ -92,7 +92,7 @@ async def follow_user(
     session.add(follow)
     await session.commit()
 
-    # Bildirim gönder
+    # Send notification
     await create_and_send_notification(
         session=session,
         user_id=target_user.id,
@@ -109,7 +109,7 @@ async def unfollow_user(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Bir kullanıcıyı takibi bırakır."""
+    """Unfollows a user."""
     query = await session.exec(select(User).where(User.username == username))
     target_user = query.one_or_none()
     if not target_user:
@@ -127,7 +127,7 @@ async def unfollow_user(
     
     await session.delete(follow)
     
-    # Takibi bırakınca bildirimi de sil
+    # Delete notification upon unfollowing
     from app.models import Notification
     from sqlmodel import delete
     delete_notification_stmt = delete(Notification).where(
@@ -146,8 +146,8 @@ async def follow_person(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Bir kişiyi (oyuncu/yönetmen) takip eder."""
-    # Zaten takip ediliyor mu kontrolü
+    """Follows a person (actor/director)."""
+    # Check if already followed
     follow_query = await session.exec(
         select(Follow).where(
             Follow.follower_id == current_user.id,
@@ -172,7 +172,7 @@ async def unfollow_person(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Bir kişiyi takibi bırakır."""
+    """Unfollows a person."""
     follow_query = await session.exec(
         select(Follow).where(
             Follow.follower_id == current_user.id,
@@ -193,7 +193,7 @@ async def get_user_follow_stats(
     username: str,
     session: AsyncSession = Depends(get_session)
 ):
-    """Kullanıcının takipçi ve takip edilen sayılarını döner."""
+    """Returns follow counts (followers and following) of the user."""
     query = await session.exec(select(User).where(User.username == username))
     user = query.one_or_none()
     if not user:
@@ -216,7 +216,7 @@ async def get_person_follow_stats(
     person_id: int,
     session: AsyncSession = Depends(get_session)
 ):
-    """Bir kişinin takipçi sayısını döner."""
+    """Returns followers count of a person."""
     followers_count = (await session.exec(
         select(func.count()).where(Follow.followed_person_id == person_id)
     )).first()
@@ -227,7 +227,7 @@ async def get_user_followers(
     username: str,
     session: AsyncSession = Depends(get_session)
 ):
-    """Belirli bir kullanıcının takipçilerini döner."""
+    """Returns followers of a specific user."""
     query = await session.exec(select(User).where(User.username == username))
     user = query.one_or_none()
     if not user:
@@ -246,20 +246,20 @@ async def get_user_following(
     session: AsyncSession = Depends(get_session),
     lang_config: dict = Depends(get_lang_config)
 ):
-    """Belirli bir kullanıcının takip ettiği kullanıcıları ve kişileri döner."""
+    """Returns users and people followed by a specific user."""
     query = await session.exec(select(User).where(User.username == username))
     user = query.one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
     
-    # Takip edilen kullanıcılar
+    # Followed users
     followed_users_query = await session.exec(
         select(User).join(Follow, Follow.followed_user_id == User.id)
         .where(Follow.follower_id == user.id)
     )
     followed_users = followed_users_query.all()
     
-    # Takip edilen kişiler
+    # Followed people
     followed_people_query = (await session.exec(
         select(Follow).where(
             Follow.follower_id == user.id,
